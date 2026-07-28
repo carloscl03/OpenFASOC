@@ -10,6 +10,8 @@ import os
 
 # Actual Pin definations for Skywater 130nm from the PDK manual
 # Ref: https://skywater-pdk.readthedocs.io/en/main/rules/layers.html#layers-definitions
+from glayout._compat import dict_to_layermap
+
 LAYER = {
     "capm": (89, 44),
     "met4": (71, 20),
@@ -136,12 +138,12 @@ sky130_mapped_pdk = MappedPDK(
 		'pfet': 'sky130_fd_pr__pfet_01v8',
 		'mimcap': 'sky130_fd_pr__cap_mim_m3_1'
     },
-    layers=LAYER,
+    layers=dict_to_layermap("sky130_layers", LAYER),
     grules=grulesobj,
     pdk_files=pdk_files,
     default_decorator=sky130_add_npc
 )
 # set the grid size
-sky130_mapped_pdk.gds_write_settings.precision = 5*10**-9
-sky130_mapped_pdk.cell_decorator_settings.cache=False
-sky130_mapped_pdk.gds_write_settings.flatten_invalid_refs=False
+# COMPAT: removido en gdsfactory 9 — sky130_mapped_pdk.gds_write_settings.precision = 5*10**-9
+# COMPAT: removido en gdsfactory 9 — sky130_mapped_pdk.cell_decorator_settings.cache=False
+# COMPAT: removido en gdsfactory 9 — sky130_mapped_pdk.gds_write_settings.flatten_invalid_refs=False

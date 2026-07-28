@@ -1,8 +1,8 @@
-from gdsfactory.typings import Component
-from pydantic import validate_arguments
+from gdsfactory import Component
+from pydantic import validate_call
 
 
-@validate_arguments
+@validate_call(config={"arbitrary_types_allowed": True})
 def component_snap_to_grid(comp: Component) -> Component:
 	"""snaps all polygons and ports in component to grid
 	comp = the component to snap to grid

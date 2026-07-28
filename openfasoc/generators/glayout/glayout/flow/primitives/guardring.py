@@ -1,8 +1,8 @@
 from glayout.flow.pdk.mappedpdk import MappedPDK
-from gdsfactory.cell import cell
+from gdsfactory import cell
 from gdsfactory.component import Component
-from gdsfactory.components.rectangle import rectangle
-from gdsfactory.components.rectangular_ring import rectangular_ring
+from gdsfactory.components import rectangle
+from glayout._compat import rectangular_ring
 from glayout.flow.primitives.via_gen import via_array, via_stack
 from typing import Optional
 from glayout.flow.pdk.util.comp_utils import to_decimal, to_float, evaluate_bbox

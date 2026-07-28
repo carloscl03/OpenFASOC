@@ -1,18 +1,17 @@
-from pydantic import validate_arguments
+from pydantic import validate_call
 from gdsfactory.snap import snap_to_grid
-from gdsfactory.typings import Component, ComponentReference
-from gdsfactory.components.rectangle import rectangle
+from gdsfactory import Component, ComponentReference
+from gdsfactory.components import rectangle
 from gdsfactory.port import Port
 from typing import Callable, Union, Optional, Iterable
 from decimal import Decimal
-from gdsfactory.functions import transformed
-from gdsfactory.functions import move as __gf_move
+from glayout._compat import transformed
 from glayout.flow.pdk.mappedpdk import MappedPDK
 from gdstk import rectangle as primitive_rectangle
 from .port_utils import add_ports_perimeter, rename_ports_by_list, parse_direction
 
 
-@validate_arguments
+@validate_call(config={"arbitrary_types_allowed": True})
 def evaluate_bbox(custom_comp: Union[Component, ComponentReference], return_decimal: Optional[bool]=False, padding: float=0) -> tuple[Union[float,Decimal],Union[float,Decimal]]:
 	"""returns the length and height of a component like object"""
 	compbbox = custom_comp.bbox
@@ -23,7 +22,7 @@ def evaluate_bbox(custom_comp: Union[Component, ComponentReference], return_deci
 	return (float(width),float(height))
 
 
-@validate_arguments
+@validate_call(config={"arbitrary_types_allowed": True})
 def center_to_edge_distance(custom_comp: Union[Component, ComponentReference], direction: Union[str,int]) -> float:
 	"""specifies the distance between the center of custom_comp and a specified edge given by the direction argument
 	the component is considerd a rectangle (using the bounding box), such there are 4 edges
@@ -49,7 +48,7 @@ def center_to_edge_distance(custom_comp: Union[Component, ComponentReference], d
 		raise ValueError("unknown error with direction in function center_to_edge_distance (comp_utils)")
 	return snap_to_grid(abs(distance),2)
 
-@validate_arguments
+@validate_call(config={"arbitrary_types_allowed": True})
 def move(custom_comp: Union[Port, ComponentReference, Component], offsetxy: tuple[float,float] = (0,0), destination: Optional[tuple[Optional[float],Optional[float]]]=None, layer: Optional[tuple[int,int]]=None) -> Union[Port, ComponentReference, Component]:
 	"""moves custom_comp
 	moves by offset[0]=x offset, offset[1]=y offset
@@ -88,7 +87,7 @@ def move(custom_comp: Union[Port, ComponentReference, Component], offsetxy: tupl
 	return custom_comp
 
 
-@validate_arguments
+@validate_call(config={"arbitrary_types_allowed": True})
 def movex(custom_comp: Union[Port, ComponentReference, Component], offsetx: Optional[float] = 0, destination: Optional[float]=None, layer: Optional[tuple[int,int]]=None) -> Union[Port, ComponentReference, Component]:
 	"""moves custom_comp by offsetx in the x direction
 	returns the modified custom_comp
@@ -98,7 +97,7 @@ def movex(custom_comp: Union[Port, ComponentReference, Component], offsetx: Opti
 	return move(custom_comp, (offsetx,0),destination,layer)
 
 
-@validate_arguments
+@validate_call(config={"arbitrary_types_allowed": True})
 def movey(custom_comp: Union[Port, ComponentReference, Component], offsety: Optional[float] = 0, destination: Optional[float]=None, layer: Optional[tuple[int,int]]=None) -> Union[Port, ComponentReference, Component]:
 	"""moves custom_comp by offsety in the y direction
 	returns the modified custom_comp
@@ -108,7 +107,7 @@ def movey(custom_comp: Union[Port, ComponentReference, Component], offsety: Opti
 	return move(custom_comp, (0,offsety),destination,layer)
 
 
-@validate_arguments
+@validate_call(config={"arbitrary_types_allowed": True})
 def align_comp_to_port(
 	custom_comp: Union[Component,ComponentReference],
 	align_to: Port,
@@ -201,7 +200,7 @@ def align_comp_to_port(
 		return transformed(comp_ref)
 
 
-@validate_arguments
+@validate_call(config={"arbitrary_types_allowed": True})
 def to_decimal(elements: Union[tuple,list,float,int,str]):
 	"""converts all elements of list like object into decimals
 	or converts single num into decimal"""
@@ -214,7 +213,7 @@ def to_decimal(elements: Union[tuple,list,float,int,str]):
 			elements[i] = Decimal(str(element))
 	return elements
 
-@validate_arguments
+@validate_call(config={"arbitrary_types_allowed": True})
 def to_float(elements: Union[tuple,list,Decimal,float]):
 	"""converts all elements of list like object into floats and snaps to grid
 	or converts single decimal into floats"""
@@ -227,7 +226,7 @@ def to_float(elements: Union[tuple,list,Decimal,float]):
 			elements[i] = snap_to_grid(float(element))
 	return elements
 
-@validate_arguments
+@validate_call(config={"arbitrary_types_allowed": True})
 def prec_array(custom_comp: Component, rows: int, columns: int, spacing: tuple[Union[float,Decimal],Union[float,Decimal]], absolute_spacing: Optional[bool]=False) -> Component:
 	"""instead of using the component.add_array function, if you are having grid snapping issues try using this function
 	works the same way as add_array but uses decimals and snaps to grid to mitigate grid snapping issues
@@ -258,7 +257,7 @@ def prec_array(custom_comp: Component, rows: int, columns: int, spacing: tuple[U
 	return precarray.flatten()
 
 
-@validate_arguments
+@validate_call(config={"arbitrary_types_allowed": True})
 def prec_center(custom_comp: Union[Component,ComponentReference], return_decimal: bool=False) -> tuple[Union[float,Decimal],Union[float,Decimal]]:
 	"""instead of using component.ref_center() to get the center of a component,
 	use this function which will return the correct offset to center a component
@@ -271,7 +270,7 @@ def prec_center(custom_comp: Union[Component,ComponentReference], return_decimal
 		return correctionxy
 	return to_float(correctionxy)
 
-@validate_arguments
+@validate_call(config={"arbitrary_types_allowed": True})
 def prec_ref_center(custom_comp: Union[Component,ComponentReference], destination: Optional[tuple[float,float]]=None, snapmov2grid: bool=False) -> ComponentReference:
 	"""instead of using component.ref_center() to get a ref to center at origin,
 	use this function which will return a centered ref

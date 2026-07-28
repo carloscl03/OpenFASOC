@@ -1,8 +1,8 @@
 from glayout.flow.pdk.mappedpdk import MappedPDK
 from glayout.flow.pdk.sky130_mapped import sky130_mapped_pdk
 from gdsfactory.component import Component
-from gdsfactory.component_reference import ComponentReference
-from gdsfactory.cell import cell
+from gdsfactory import ComponentReference
+from gdsfactory import cell
 from gdsfactory import Component
 from gdsfactory.components import text_freetype, rectangle
 from glayout.flow.primitives.fet import nmos, pmos, multiplier

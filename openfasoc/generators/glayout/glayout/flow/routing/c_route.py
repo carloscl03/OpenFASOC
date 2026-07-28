@@ -1,4 +1,4 @@
-from gdsfactory.cell import cell
+from gdsfactory import cell
 from gdsfactory.component import Component
 from gdsfactory.port import Port
 from glayout.flow.pdk.mappedpdk import MappedPDK
@@ -6,14 +6,14 @@ from typing import Optional, Union
 from math import isclose
 from glayout.flow.primitives.via_gen import via_stack, via_array
 from glayout.flow.routing.straight_route import straight_route
-from gdsfactory.components.rectangle import rectangle
+from gdsfactory.components import rectangle
 from glayout.flow.pdk.util.comp_utils import evaluate_bbox, get_primitive_rectangle, to_float, prec_ref_center
 from glayout.flow.pdk.util.port_utils import add_ports_perimeter, rename_ports_by_orientation, rename_ports_by_list, print_ports, set_port_width, set_port_orientation, get_orientation
-from pydantic import validate_arguments
+from pydantic import validate_call
 from gdsfactory.snap import snap_to_grid
 
 
-@validate_arguments
+@validate_call(config={"arbitrary_types_allowed": True})
 def __fill_empty_viastack__macro(pdk: MappedPDK, glayer: str, size: Optional[tuple[float,float]]=None) -> Component:
     """returns a rectangle with ports that pretend to be viastack ports
     by default creates a rectangle with size double the min width of the glayer"""

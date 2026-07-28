@@ -1,7 +1,7 @@
-from gdsfactory.cell import cell, clear_cache
-from gdsfactory.component import Component, copy
-from gdsfactory.component_reference import ComponentReference
-from gdsfactory.components.rectangle import rectangle
+from gdsfactory import cell, clear_cache
+from gdsfactory.component import Component
+from gdsfactory import ComponentReference
+from gdsfactory.components import rectangle
 from glayout.flow.pdk.mappedpdk import MappedPDK
 from typing import Optional, Union
 from glayout.flow.blocks.elementary.diff_pair import diff_pair
@@ -11,7 +11,7 @@ from glayout.flow.primitives.mimcap import mimcap_array, mimcap
 from glayout.flow.primitives.via_gen import via_stack, via_array
 from glayout.flow.routing.L_route import L_route
 from glayout.flow.routing.c_route import c_route
-from gdsfactory.routing.route_quad import route_quad
+from glayout._compat import route_quad
 from glayout.flow.pdk.util.comp_utils import (
     evaluate_bbox,
     prec_ref_center,
@@ -33,7 +33,7 @@ from glayout.flow.pdk.util.port_utils import (
 )
 from glayout.flow.routing.straight_route import straight_route
 from glayout.flow.pdk.util.snap_to_grid import component_snap_to_grid
-from pydantic import validate_arguments
+from pydantic import validate_call
 from glayout.flow.placement.two_transistor_interdigitized import two_nfet_interdigitized
 from glayout.flow.spice import Netlist
 from glayout.flow.blocks.elementary.current_mirror import current_mirror_netlist
@@ -73,7 +73,7 @@ def diff_pair_ibias_netlist(center_diffpair: Component, current_mirror: Componen
 
     return netlist
 
-@validate_arguments
+@validate_call(config={"arbitrary_types_allowed": True})
 def diff_pair_ibias(
     pdk: MappedPDK,
     half_diffpair_params: tuple[float, float, int],

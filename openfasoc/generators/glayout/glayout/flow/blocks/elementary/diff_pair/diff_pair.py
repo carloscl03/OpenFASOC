@@ -1,10 +1,10 @@
 from typing import Optional, Union
 
-from gdsfactory.cell import cell
-from gdsfactory.component import Component, copy
-from gdsfactory.components.rectangle import rectangle
-from gdsfactory.routing.route_quad import route_quad
-from gdsfactory.routing.route_sharp import route_sharp
+from gdsfactory import cell
+from gdsfactory.component import Component
+from gdsfactory.components import rectangle
+from glayout._compat import route_quad
+from glayout._compat import route_sharp
 from glayout.flow.pdk.mappedpdk import MappedPDK
 from glayout.flow.pdk.util.comp_utils import align_comp_to_port, evaluate_bbox, movex, movey
 from glayout.flow.pdk.util.port_utils import (
@@ -216,7 +216,7 @@ def diff_pair(
 	diffpair.add_ports(PLUSgate_routeE.get_ports_list(),prefix="PLUSgateroute_E_")
 	diffpair.add_padding(layers=(pdk.get_glayer(well),), default=0)
 
-	component = component_snap_to_grid(rename_ports_by_orientation(diffpair))
+	component = component_snap_to_grid(diffpair)  # COMPAT: rename causes _S/_N flip post-mirror
 
 	component.info['netlist'] = diff_pair_netlist(fetL, fetR)
 	return component

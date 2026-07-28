@@ -20,7 +20,7 @@ from glayout.flow.pdk.util.snap_to_grid import component_snap_to_grid
 from gdsfactory.components import text_freetype, rectangle
 from glayout.flow.pdk.mappedpdk import MappedPDK
 from glayout.flow.primitives.via_gen import via_array, via_stack
-from gdsfactory.cell import cell, clear_cache
+from gdsfactory import cell, clear_cache
 import numpy as np
 from subprocess import Popen
 from pathlib import Path

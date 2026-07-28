@@ -4,6 +4,7 @@ usage: from gf180_mapped import gf180_mapped_pdk
 
 from ..gf180_mapped.grules import grulesobj
 from ..mappedpdk import MappedPDK, SetupPDKFiles
+from glayout._compat import dict_to_layermap  # COMPAT gf9: layers dict->LayerEnum
 from pathlib import Path
 import os
 
@@ -109,11 +110,11 @@ gf180_mapped_pdk = MappedPDK(
 		'pfet': 'pfet_03v3',
 		'mimcap': 'mimcap_1p0fF'
     },
-    layers=LAYER,
+    layers=dict_to_layermap("gf180_layers", LAYER),
     pdk_files=pdk_files,
     grules=grulesobj,
 )
 
 # configure the grid size and other settings
-gf180_mapped_pdk.gds_write_settings.precision = 5*10**-9
-gf180_mapped_pdk.cell_decorator_settings.cache=False
+# COMPAT: removido en gdsfactory 9 — gf180_mapped_pdk.gds_write_settings.precision = 5*10**-9
+# COMPAT: removido en gdsfactory 9 — gf180_mapped_pdk.cell_decorator_settings.cache=False

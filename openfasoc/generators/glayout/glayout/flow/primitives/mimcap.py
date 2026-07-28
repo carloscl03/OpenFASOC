@@ -1,17 +1,17 @@
-from gdsfactory.cell import cell
+from gdsfactory import cell
 from gdsfactory.component import Component
-from gdsfactory.components.rectangle import rectangle
+from gdsfactory.components import rectangle
 from glayout.flow.pdk.mappedpdk import MappedPDK
 from typing import Optional
 from glayout.flow.primitives.via_gen import via_array
 from glayout.flow.pdk.util.comp_utils import prec_array, to_decimal, to_float
 from glayout.flow.pdk.util.port_utils import rename_ports_by_orientation, add_ports_perimeter, print_ports
-from pydantic import validate_arguments
+from pydantic import validate_call
 from glayout.flow.routing.straight_route import straight_route
 from decimal import ROUND_UP, Decimal
 from glayout.flow.spice import Netlist
 
-@validate_arguments
+@validate_call(config={"arbitrary_types_allowed": True})
 def __get_mimcap_layerconstruction_info(pdk: MappedPDK) -> tuple[str,str]:
 	"""returns the glayer metal below and glayer metal above capmet
 	args: pdk

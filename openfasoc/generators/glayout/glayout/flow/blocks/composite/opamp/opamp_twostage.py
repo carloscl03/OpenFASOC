@@ -1,7 +1,8 @@
-from gdsfactory.cell import cell, clear_cache
-from gdsfactory.component import Component, copy
-from gdsfactory.component_reference import ComponentReference
-from gdsfactory.components.rectangle import rectangle
+from gdsfactory import cell
+from glayout._compat import clear_cache_noop as clear_cache  # COMPAT: gf9 clear_cache destroys live refs
+from gdsfactory.component import Component
+from gdsfactory import ComponentReference
+from gdsfactory.components import rectangle
 from glayout.flow.pdk.mappedpdk import MappedPDK
 from typing import Optional, Union
 from glayout.flow.primitives.fet import nmos, pmos, multiplier
@@ -11,12 +12,12 @@ from glayout.flow.primitives.mimcap import mimcap_array, mimcap
 from glayout.flow.routing.L_route import L_route
 from glayout.flow.routing.c_route import c_route
 from glayout.flow.primitives.via_gen import via_stack, via_array
-from gdsfactory.routing.route_quad import route_quad
+from glayout._compat import route_quad
 from glayout.flow.pdk.util.comp_utils import evaluate_bbox, prec_ref_center, movex, movey, to_decimal, to_float, move, align_comp_to_port, get_padding_points_cc
 from glayout.flow.pdk.util.port_utils import rename_ports_by_orientation, rename_ports_by_list, add_ports_perimeter, print_ports, set_port_orientation, rename_component_ports
 from glayout.flow.routing.straight_route import straight_route
 from glayout.flow.pdk.util.snap_to_grid import component_snap_to_grid
-from pydantic import validate_arguments
+from pydantic import validate_call
 from glayout.flow.placement.two_transistor_interdigitized import two_nfet_interdigitized
 
 from glayout.flow.blocks.composite.diffpair_cmirror_bias import diff_pair_ibias
@@ -27,7 +28,7 @@ from glayout.flow.blocks.composite.opamp.diff_pair_stackedcmirror import diff_pa
 from glayout.flow.spice import Netlist
 from glayout.flow.blocks.elementary.current_mirror import current_mirror_netlist
 
-@validate_arguments
+@validate_call(config={"arbitrary_types_allowed": True})
 def __create_and_route_pins(
     pdk: MappedPDK,
     opamp_top: Component,
@@ -35,16 +36,26 @@ def __create_and_route_pins(
     halfmultn_drain_routeref: ComponentReference,
     halfmultn_gate_routeref: ComponentReference
 ) -> tuple:
+    import time as _tpins; _t0pins=_tpins.time()
     _max_metal_seperation_ps = pdk.util_max_metal_seperation()
+    # COMPAT gf9: rectangle() cells are kfactory-cached; rename_ports_by_orientation called elsewhere
+    # may have renamed their ports from e1..e4 to W/N/E/S globally. Wrap each in a fresh Component
+    # so our instance always has e1..e4 ports regardless of cache state.
+    def _fresh_rect(size, layer):
+        _w = Component()
+        _inst = _w.add_ref(rectangle(size=size,layer=layer,centered=True))
+        _w.add_ports(_inst.ports)
+        return _w
     # route halfmultp source, drain, and gate together, place vdd pin in the middle
     halfmultp_Lsrcport = opamp_top.ports["commonsource_Pamp_L_multiplier_0_source_con_N"]
     halfmultp_Rsrcport = opamp_top.ports["commonsource_Pamp_R_multiplier_0_source_con_N"]
     opamp_top << c_route(pdk, halfmultp_Lsrcport, halfmultp_Rsrcport, extension=opamp_top.ymax-halfmultp_Lsrcport.center[1], fullbottom=True,viaoffset=(False,False))
     # place vdd pin
-    vddpin = opamp_top << rectangle(size=(5,3),layer=pdk.get_glayer("met4"),centered=True)
+    vddpin = opamp_top << _fresh_rect((5,3),pdk.get_glayer("met4"))
     vddpin.movey(opamp_top.ymax)
     # route vdd to source of 2L/2R
     opamp_top << straight_route(pdk, opamp_top.ports["pcomps_2L2Rsrcvia_top_met_N"], vddpin.ports["e4"])
+    print(f"[LOG]   pins: vddpin OK ({_tpins.time()-_t0pins:.1f}s)",flush=True)
     # drain route above vdd pin
     halfmultp_Ldrainport = opamp_top.ports["commonsource_Pamp_L_multiplier_0_drain_con_N"]
     halfmultp_Rdrainport = opamp_top.ports["commonsource_Pamp_R_multiplier_0_drain_con_N"]
@@ -57,6 +68,7 @@ def __create_and_route_pins(
     extensionR = max(halfmultn_drain_routeref.ports["con_E"].center[0],halfmultp_drain_routeref.ports["con_E"].center[0])
     opamp_top << c_route(pdk, halfmultn_drain_routeref.ports["con_W"], halfmultp_drain_routeref.ports["con_W"],extension=abs(opamp_top.xmin-extensionL)+2,cwidth=2)
     n_to_p_output_route = opamp_top << c_route(pdk, halfmultn_drain_routeref.ports["con_E"], halfmultp_drain_routeref.ports["con_E"],extension=abs(opamp_top.xmax-extensionR)+2,cwidth=2)
+    print(f"[LOG]   pins: drain routes OK ({_tpins.time()-_t0pins:.1f}s)",flush=True)
     # top nwell taps to vdd, top p substrate taps to gnd
     opamp_top << straight_route(pdk, opamp_top.ports["commonsource_cmirror_output_L_tie_N_top_met_N"], opamp_top.ports["pcomps_top_ptap_S_top_met_S"], width=5)
     opamp_top << straight_route(pdk, opamp_top.ports["commonsource_cmirror_output_R_tie_N_top_met_N"], opamp_top.ports["pcomps_top_ptap_S_top_met_S"], width=5)
@@ -64,15 +76,17 @@ def __create_and_route_pins(
     R_toptapn_route = opamp_top.ports["commonsource_Pamp_R_tie_N_top_met_N"]
     opamp_top << straight_route(pdk, movex(vddpin.ports["e4"],destination=L_toptapn_route.center[0]), L_toptapn_route, glayer1="met3",fullbottom=True)
     opamp_top << straight_route(pdk, movex(vddpin.ports["e4"],destination=R_toptapn_route.center[0]), R_toptapn_route, glayer1="met3",fullbottom=True)
+    print(f"[LOG]   pins: taptop routes OK ({_tpins.time()-_t0pins:.1f}s)",flush=True)
     # bias pins for first two stages
-    vbias1 = opamp_top << rectangle(size=(5,3),layer=pdk.get_glayer("met3"),centered=True)
+    vbias1 = opamp_top << _fresh_rect((5,3),pdk.get_glayer("met3"))
     vbias1.movey(opamp_top.ymin - _max_metal_seperation_ps - vbias1.ymax)
     opamp_top << straight_route(pdk, vbias1.ports["e2"], opamp_top.ports["diffpair_ibias_B_gate_S"],width=1,fullbottom=False)
-    vbias2 = opamp_top << rectangle(size=(5,3),layer=pdk.get_glayer("met5"),centered=True)
+    vbias2 = opamp_top << _fresh_rect((5,3),pdk.get_glayer("met5"))
     vbias2.movex(1+opamp_top.xmax+evaluate_bbox(vbias2)[0]+pdk.util_max_metal_seperation()).movey(opamp_top.ymin+vbias2.ymax)
     opamp_top << L_route(pdk, halfmultn_gate_routeref.ports["con_E"], vbias2.ports["e2"],hwidth=2)
+    print(f"[LOG]   pins: vbias routes OK ({_tpins.time()-_t0pins:.1f}s)",flush=True)
     # route + and - pins (being careful about antenna violations)
-    minusi_pin = opamp_top << rectangle(size=(5,2),layer=pdk.get_glayer("met3"),centered=True)
+    minusi_pin = opamp_top << _fresh_rect((5,2),pdk.get_glayer("met3"))
     minusi_pin.movex(opamp_top.xmin).movey(_max_metal_seperation_ps + minusi_pin.ymax + halfmultn_drain_routeref.ports["con_W"].center[1] + halfmultn_drain_routeref.ports["con_W"].width/2)
     iport_antenna1 = movex(minusi_pin.ports["e3"],destination=opamp_top.ports["diffpair_MINUSgateroute_W_con_N"].center[0]-9*_max_metal_seperation_ps)
     opamp_top << L_route(pdk, opamp_top.ports["diffpair_MINUSgateroute_W_con_N"],iport_antenna1)
@@ -80,7 +94,8 @@ def __create_and_route_pins(
     opamp_top << straight_route(pdk, iport_antenna1, iport_antenna2,glayer1="met4",glayer2="met4",via2_alignment=('c','c'),via1_alignment=('c','c'),fullbottom=True)
     iport_antenna2.layer=pdk.get_glayer("met4")
     opamp_top << straight_route(pdk, iport_antenna2, minusi_pin.ports["e3"],glayer1="met3",via2_alignment=('c','c'),via1_alignment=('c','c'),fullbottom=True)
-    plusi_pin = opamp_top << rectangle(size=(5,2),layer=pdk.get_glayer("met3"),centered=True)
+    print(f"[LOG]   pins: minusi OK ({_tpins.time()-_t0pins:.1f}s)",flush=True)
+    plusi_pin = opamp_top << _fresh_rect((5,2),pdk.get_glayer("met3"))
     plusi_pin.movex(opamp_top.xmin + plusi_pin.xmax).movey(_max_metal_seperation_ps + minusi_pin.ymax + plusi_pin.ymax)
     iport_antenna1 = movex(plusi_pin.ports["e3"],destination=opamp_top.ports["diffpair_PLUSgateroute_E_con_N"].center[0]-9*_max_metal_seperation_ps)
     opamp_top << L_route(pdk, opamp_top.ports["diffpair_PLUSgateroute_E_con_N"],iport_antenna1)
@@ -88,9 +103,11 @@ def __create_and_route_pins(
     opamp_top << straight_route(pdk, iport_antenna1, iport_antenna2, glayer1="met4",glayer2="met4",via2_alignment=('c','c'),via1_alignment=('c','c'),fullbottom=True)
     iport_antenna2.layer=pdk.get_glayer("met4")
     opamp_top << straight_route(pdk, iport_antenna2, plusi_pin.ports["e3"],glayer1="met3",via2_alignment=('c','c'),via1_alignment=('c','c'),fullbottom=True)
+    print(f"[LOG]   pins: plusi OK ({_tpins.time()-_t0pins:.1f}s)",flush=True)
     # route top center components to diffpair
     opamp_top << straight_route(pdk,opamp_top.ports["diffpair_tr_multiplier_0_drain_N"], opamp_top.ports["pcomps_pbottomAB_R_gate_S"], glayer1="met5",width=3*pdk.get_grule("met5")["min_width"],via1_alignment_layer="met2",via1_alignment=('c','c'))
     opamp_top << straight_route(pdk,opamp_top.ports["diffpair_tl_multiplier_0_drain_N"], opamp_top.ports["pcomps_minusvia_top_met_S"], glayer1="met5",width=3*pdk.get_grule("met5")["min_width"],via1_alignment_layer="met2",via1_alignment=('c','c'))
+    print(f"[LOG]   pins: diffpair routes OK ({_tpins.time()-_t0pins:.1f}s)",flush=True)
     # route minus transistor drain to output
     outputvia_diff_pcomps = opamp_top << via_stack(pdk,"met5","met4")
     outputvia_diff_pcomps.movex(opamp_top.ports["diffpair_tl_multiplier_0_drain_N"].center[0]).movey(ptop_halfmultp_gate_route.ports["con_E"].center[1])
@@ -101,18 +118,21 @@ def __create_and_route_pins(
     opamp_top.add_ports(minusi_pin.get_ports_list(), prefix="pin_minus_")
     opamp_top.add_ports(plusi_pin.get_ports_list(), prefix="pin_plus_")
     #opamp_top.add_ports(output.get_ports_list(), prefix="pin_output_")
+    print(f"[LOG]   pins: COMPLETO ({_tpins.time()-_t0pins:.1f}s)",flush=True)
     return opamp_top, n_to_p_output_route
 
 
 
-@validate_arguments
+@validate_call(config={"arbitrary_types_allowed": True})
 def __add_mimcap_arr(pdk: MappedPDK, opamp_top: Component, mim_cap_size, mim_cap_rows, ymin: float, n_to_p_output_route) -> tuple[Component, Netlist]:
     mim_cap_size = pdk.snap_to_2xgrid(mim_cap_size, return_type="float")
     max_metalsep = pdk.util_max_metal_seperation()
-    mimcaps_ref = opamp_top << mimcap_array(pdk,mim_cap_rows,2,size=mim_cap_size,rmult=6)
     if int(mim_cap_rows) < 1:
         raise ValueError("mim_cap_rows should be a positive integer")
-    mimcap_netlist = mimcaps_ref.info['netlist']
+    # COMPAT gf9: info dict no se propaga al ComponentReference, guardamos antes del <<
+    _mimcap_comp = mimcap_array(pdk,mim_cap_rows,2,size=mim_cap_size,rmult=6)
+    mimcap_netlist = _mimcap_comp.info['netlist']
+    mimcaps_ref = opamp_top << _mimcap_comp
 
     displace_fact = max(max_metalsep,pdk.get_grule("capmet")["min_separation"])
     mimcaps_ref.movex(pdk.snap_to_2xgrid(opamp_top.xmax + displace_fact + mim_cap_size[0]/2))
@@ -210,14 +230,19 @@ def opamp_twostage(
         raise ValueError("number of antenna diodes should be at least 2 (or 0 to specify no diodes)")
     if half_common_source_bias[3] < 2:
         raise ValueError("half_common_source_bias num multiplier must be >= 2")
+    import time as _t; _t0=_t.time(); print("[LOG] opamp_twostage: INICIO",flush=True)
+    print("[LOG] --> diff_pair_stackedcmirror...",flush=True)
     opamp_top, halfmultn_drain_routeref, halfmultn_gate_routeref, _cref = diff_pair_stackedcmirror(pdk, half_diffpair_params, diffpair_bias, half_common_source_bias, rmult, with_antenna_diode_on_diffinputs)
 
-    opamp_top.info['netlist'].circuit_name = "INPUT_STAGE"
+    print(f"[LOG] <-- diff_pair_stackedcmirror OK ({_t.time()-_t0:.1f}s)",flush=True)
+    opamp_top.info["netlist"].circuit_name = "INPUT_STAGE"
 
     # place pmos components
+    print(f"[LOG] --> differential_to_single_ended ({_t.time()-_t0:.1f}s)",flush=True)
     pmos_comps = differential_to_single_ended_converter(pdk, rmult, half_pload, opamp_top.ports["diffpair_tl_multiplier_0_drain_N"].center[0])
     clear_cache()
 
+    print(f"[LOG] --> row_csamplifier ({_t.time()-_t0:.1f}s)",flush=True)
     pmos_comps = row_csamplifier_diff_to_single_ended_converter(pdk, pmos_comps, half_common_source_params, rmult)
 
     cs_bias_netlist = current_mirror_netlist(
@@ -227,17 +252,30 @@ def opamp_twostage(
         multipliers=diffpair_bias[2]
     )
 
+    print(f"[LOG] --> colocando pmos_comps_ref ({_t.time()-_t0:.1f}s)",flush=True)
     ydim_ncomps = opamp_top.ymax
     pmos_comps_ref = opamp_top << pmos_comps
     pmos_comps_ref.movey(round(ydim_ncomps + pmos_comps_ref.ymax+10))
-    opamp_top.add_ports(pmos_comps_ref.get_ports_list(),prefix="pcomps_")
-    rename_func = lambda name_, port_ : name_.replace("pcomps_halfpspecialmarker","commonsource_Pamp") if name_.startswith("pcomps_halfpspecialmarker") else name_
-    opamp_top = rename_component_ports(opamp_top, rename_function=rename_func)
+    _ports_list = pmos_comps_ref.get_ports_list()
+    print(f"[LOG]   pmos_comps_ref ports: {len(_ports_list)} ({_t.time()-_t0:.1f}s)",flush=True)
+    opamp_top.add_ports(_ports_list,prefix="pcomps_")
+    print(f"[LOG]   add_ports OK ({_t.time()-_t0:.1f}s)",flush=True)
+    # COMPAT gf9: rename_component_ports itera todos los ports (11k+) = 47min.
+    # Solo necesitamos renombrar ports con prefijo pcomps_halfpspecialmarker.
+    # Hacemos el rename directamente sobre el dict de ports del Component.
+    # COMPAT gf9: DInstancePorts no tiene __delitem__, solo agregamos el nuevo nombre.
+    # glayout busca por nombre especifico, tener ambos nombres no causa conflicto.
+    for pname in list(opamp_top.ports.keys()):
+        if pname.startswith("pcomps_halfpspecialmarker"):
+            new_name = pname.replace("pcomps_halfpspecialmarker","commonsource_Pamp")
+            opamp_top.add_port(name=new_name, port=opamp_top.ports[pname])
     # create pins and route
     clear_cache()
+    print(f"[LOG] --> __create_and_route_pins ({_t.time()-_t0:.1f}s)",flush=True)
     opamp_top, n_to_p_output_route = __create_and_route_pins(pdk, opamp_top, pmos_comps_ref, halfmultn_drain_routeref, halfmultn_gate_routeref)
     # place mimcaps and route
     clear_cache()
+    print(f"[LOG] --> __add_mimcap_arr ({_t.time()-_t0:.1f}s)",flush=True)
     opamp_top, mimcap_netlist = __add_mimcap_arr(pdk, opamp_top, mim_cap_size, mim_cap_rows, pmos_comps_ref.ymin, n_to_p_output_route)
     opamp_top.add_ports(n_to_p_output_route.get_ports_list(),"special_con_npr_")
     # return

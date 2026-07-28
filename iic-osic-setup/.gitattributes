@@ -1,0 +1,2 @@
+iic-osic-setup/setup/*.sh text eol=lf
+iic-osic-setup/examples/*.py text eol=lf

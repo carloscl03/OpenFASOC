@@ -1,7 +1,8 @@
-from gdsfactory.cell import cell, clear_cache
-from gdsfactory.component import Component, copy
-from gdsfactory.component_reference import ComponentReference
-from gdsfactory.components.rectangle import rectangle
+from gdsfactory import cell
+from glayout._compat import clear_cache_noop as clear_cache  # COMPAT: gf9 clear_cache destroys live refs
+from gdsfactory.component import Component
+from gdsfactory import ComponentReference
+from gdsfactory.components import rectangle
 from glayout.flow.pdk.mappedpdk import MappedPDK
 from typing import Optional, Union
 from glayout.flow.primitives.fet import nmos, pmos, multiplier
@@ -11,12 +12,12 @@ from glayout.flow.primitives.mimcap import mimcap_array, mimcap
 from glayout.flow.routing.L_route import L_route
 from glayout.flow.routing.c_route import c_route
 from glayout.flow.primitives.via_gen import via_stack, via_array
-from gdsfactory.routing.route_quad import route_quad
+from glayout._compat import route_quad
 from glayout.flow.pdk.util.comp_utils import evaluate_bbox, prec_ref_center, movex, movey, to_decimal, to_float, move, align_comp_to_port, get_padding_points_cc
 from glayout.flow.pdk.util.port_utils import rename_ports_by_orientation, rename_ports_by_list, add_ports_perimeter, print_ports, set_port_orientation, rename_component_ports
 from glayout.flow.routing.straight_route import straight_route
 from glayout.flow.pdk.util.snap_to_grid import component_snap_to_grid
-from pydantic import validate_arguments
+from pydantic import validate_call
 from glayout.flow.placement.two_transistor_interdigitized import two_nfet_interdigitized
 from glayout.flow.spice import Netlist
 
@@ -43,7 +44,7 @@ def opamp_output_stage_netlist(pdk: MappedPDK, output_amp_fet_ref: ComponentRefe
 
     return output_stage_netlist
 
-@validate_arguments
+@validate_call(config={"arbitrary_types_allowed": True})
 def __add_output_stage(
     pdk: MappedPDK,
     opamp_top: Component,

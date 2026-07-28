@@ -1,8 +1,8 @@
 from glayout.flow.pdk.mappedpdk import MappedPDK
 from glayout.flow.pdk.sky130_mapped import sky130_mapped_pdk
 from gdsfactory import Component
-from gdsfactory.cell import cell
-from gdsfactory.component_reference import ComponentReference
+from gdsfactory import cell
+from gdsfactory import ComponentReference
 
 from glayout.flow.pdk.util.comp_utils import evaluate_bbox, prec_ref_center, prec_center, align_comp_to_port
 from glayout.flow.pdk.util.port_utils import rename_ports_by_orientation

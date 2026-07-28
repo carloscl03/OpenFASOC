@@ -1,7 +1,8 @@
-from gdsfactory.cell import cell, clear_cache
-from gdsfactory.component import Component, copy
-from gdsfactory.component_reference import ComponentReference
-from gdsfactory.components.rectangle import rectangle
+from gdsfactory import cell
+from glayout._compat import clear_cache_noop as clear_cache  # COMPAT: gf9 clear_cache destroys live refs
+from gdsfactory.component import Component
+from gdsfactory import ComponentReference
+from gdsfactory.components import rectangle
 from glayout.flow.pdk.mappedpdk import MappedPDK
 from typing import Optional, Union
 from glayout.flow.blocks.elementary.diff_pair import diff_pair
@@ -11,12 +12,12 @@ from glayout.flow.primitives.mimcap import mimcap_array, mimcap
 from glayout.flow.primitives.via_gen import via_stack, via_array
 from glayout.flow.routing.L_route import L_route
 from glayout.flow.routing.c_route import c_route
-from gdsfactory.routing.route_quad import route_quad
+from glayout._compat import route_quad
 from glayout.flow.pdk.util.comp_utils import evaluate_bbox, prec_ref_center, movex, movey, to_decimal, to_float, move, align_comp_to_port, get_padding_points_cc
 from glayout.flow.pdk.util.port_utils import rename_ports_by_orientation, rename_ports_by_list, add_ports_perimeter, print_ports, set_port_orientation, rename_component_ports
 from glayout.flow.routing.straight_route import straight_route
 from glayout.flow.pdk.util.snap_to_grid import component_snap_to_grid
-from pydantic import validate_arguments
+from pydantic import validate_call
 from glayout.flow.placement.two_transistor_interdigitized import two_nfet_interdigitized
 
 from glayout.flow.blocks.composite.diffpair_cmirror_bias import diff_pair_ibias
@@ -25,7 +26,7 @@ from glayout.flow.blocks.composite.differential_to_single_ended_converter import
 from glayout.flow.blocks.composite.opamp.row_csamplifier_diff_to_single_ended_converter import row_csamplifier_diff_to_single_ended_converter
 
 
-@validate_arguments
+@validate_call(config={"arbitrary_types_allowed": True})
 def __add_diff_pair_and_bias(pdk: MappedPDK, toplevel_stacked: Component, half_diffpair_params: tuple[float, float, int], diffpair_bias: tuple[float, float, int], rmult: int, with_antenna_diode_on_diffinputs: int) -> Component:
     clear_cache()
     diffpair_i_ref = diff_pair_ibias(pdk, half_diffpair_params, diffpair_bias, rmult, with_antenna_diode_on_diffinputs)
@@ -36,7 +37,7 @@ def __add_diff_pair_and_bias(pdk: MappedPDK, toplevel_stacked: Component, half_d
 
     return toplevel_stacked
 
-@validate_arguments
+@validate_call(config={"arbitrary_types_allowed": True})
 def __add_common_source_nbias_transistors(pdk: MappedPDK, toplevel_stacked: Component, half_common_source_nbias: tuple[float, float, int, int], rmult: int) -> Component:
     clear_cache()
     x_dim_center = toplevel_stacked.xmax
@@ -61,7 +62,7 @@ def __add_common_source_nbias_transistors(pdk: MappedPDK, toplevel_stacked: Comp
         toplevel_stacked << straight_route(pdk, toplevel_stacked.ports["commonsource_cmirror_output_"+side+"_tie_S_top_met_S"], toplevel_stacked.ports["commonsource_cmirror_ref_"+side+"_tie_N_top_met_N"])
     return toplevel_stacked
 
-@validate_arguments
+@validate_call(config={"arbitrary_types_allowed": True})
 def __route_bottom_ncomps_except_drain_nbias(pdk: MappedPDK, toplevel_stacked: Component, gndpin: Union[Component,ComponentReference], halfmultn_num_mults: int) -> tuple:
     clear_cache()
     # route diff pair cmirror
@@ -114,17 +115,32 @@ def diff_pair_stackedcmirror(
     with_antenna_diode_on_diffinputs: int
 ) -> Component:
     # create toplevel_stacked component
+    import time as _tlog; _t0log=_tlog.time()
     toplevel_stacked = Component()
     # place nmos components
+    print("[LOG]   diff_pair_ibias...",flush=True)
     diffpair_and_bias = __add_diff_pair_and_bias(pdk, toplevel_stacked, half_diffpair_params, diffpair_bias, rmult, with_antenna_diode_on_diffinputs)
     # create and position each half of the nmos bias transistor for the common source stage symetrically
+    print(f"[LOG]   diff_pair_ibias OK ({_tlog.time()-_t0log:.1f}s)",flush=True)
+    _t1log=_tlog.time(); print("[LOG]   stacked_cmirrors (L+R)...",flush=True)
     toplevel_stacked = __add_common_source_nbias_transistors(pdk, toplevel_stacked, half_common_source_nbias, rmult)
+    print(f"[LOG]   stacked_cmirrors OK ({_tlog.time()-_t1log:.1f}s)",flush=True)
     toplevel_stacked.add_padding(layers=(pdk.get_glayer("pwell"),),default=0)
     # add ground pin
-    gndpin = toplevel_stacked << rename_ports_by_orientation(rectangle(size=(5,3),layer=pdk.get_glayer("met4"),centered=True))
+    # COMPAT gf9: rename_ports_by_orientation modifica la celda cacheada de rectangle
+    # afectando TODOS los usos futuros de rectangle(5,3,met4). Usamos un wrapper.
+    import gdsfactory as _gf_gnd
+    _gnd_rect = _gf_gnd.Component()
+    _gnd_inst = _gnd_rect.add_ref(rectangle(size=(5,3),layer=pdk.get_glayer("met4"),centered=True))
+    _gnd_rect.add_ports(_gnd_inst.ports)
+    from glayout.flow.pdk.util.port_utils import rename_ports_by_orientation as _rpbo
+    _gnd_rect = _rpbo(_gnd_rect)
+    gndpin = toplevel_stacked << _gnd_rect
     gndpin.movey(pdk.snap_to_2xgrid(toplevel_stacked.ymin-pdk.util_max_metal_seperation()-gndpin.ymax))
     # route bottom ncomps except drain of nbias (still need to place common source pmos amp)
+    _t2log=_tlog.time(); print("[LOG]   __route_bottom_ncomps...",flush=True)
     toplevel_stacked, halfmultn_drain_routeref, halfmultn_gate_routeref, _cref = __route_bottom_ncomps_except_drain_nbias(pdk, toplevel_stacked, gndpin, half_common_source_nbias[3])
     toplevel_stacked.add_ports(gndpin.get_ports_list(), prefix="pin_gnd_")
+    print(f"[LOG]   __route_bottom_ncomps OK ({_tlog.time()-_t2log:.1f}s) | TOTAL diff_pair_stackedcmirror ({_tlog.time()-_t0log:.1f}s)",flush=True)
 
     return toplevel_stacked, halfmultn_drain_routeref, halfmultn_gate_routeref, _cref

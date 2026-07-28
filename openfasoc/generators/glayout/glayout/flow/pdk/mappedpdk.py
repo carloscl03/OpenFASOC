@@ -3,15 +3,16 @@ usage: from mappedpdk import MappedPDK
 """
 
 from gdsfactory.pdk import Pdk
-from gdsfactory.typings import Component, PathType, Layer
-from pydantic import validator, StrictStr, ValidationError
+from gdsfactory import Component
+from gdsfactory.typings import PathType, Layer
+from pydantic import field_validator, StrictStr, ValidationError, ConfigDict
 from typing import ClassVar, Optional, Any, Union, Literal, Iterable, TypedDict
 from pathlib import Path
 from decimal import Decimal, ROUND_UP
 import tempfile
 import subprocess
 from decimal import Decimal
-from pydantic import validate_arguments
+from pydantic import validate_call
 import xml.etree.ElementTree as ET
 import pathlib, shutil, os, sys
 
@@ -217,6 +218,56 @@ class MappedPDK(Pdk):
     has_required_glayers(list[str]) is used to verify all required generic layers are
     present"""
 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    # COMPAT: gdsfactory 9 / pydantic 2 — la clase padre Pdk descarta los campos
+    # extra (grules/glayers/pdk_files/models) al construir, dejando el modelo sin
+    # esos atributos (self.grules -> AttributeError). Los capturamos aquí y los
+    # guardamos como atributos normales del objeto vía object.__setattr__ tras
+    # construir el modelo base.
+    def __init__(self, **kwargs):
+        # Campos propios de MappedPDK (no de Pdk) con su default por si no vienen.
+        _extra_defaults = {
+            "glayers": None, "grules": None, "pdk_files": None,
+            "models": None, "grid_size": 0.005,
+        }
+        _saved = {}
+        for _fld, _dflt in _extra_defaults.items():
+            if _fld in kwargs:
+                _saved[_fld] = kwargs.pop(_fld)
+            elif _dflt is not None:
+                _saved[_fld] = _dflt
+        super().__init__(**kwargs)
+        for _fld, _val in _saved.items():
+            object.__setattr__(self, _fld, _val)
+
+    def __hash__(self):  # noqa: D401
+        """COMPAT: gdsfactory 9 / kfactory @cell decorator necesita hash."""
+        return hash(self.name)
+
+    def validate_layers(self, layers):  # noqa: D401
+        """COMPAT: gdsfactory 9 removió Pdk.validate_layers. Stub no-op."""
+        return True
+
+    @property
+    def layers_dict(self):
+        """COMPAT: devuelve el dict {name: (layer, datatype)} del LayerMap subyacente.
+
+        Reconstruye el dict desde el LayerMap iterando sus members. Esto es
+        más robusto que cachear por id() porque siempre funciona.
+        """
+        lm = self.layers
+        if lm is None:
+            return {}
+        try:
+            return {m.name: (int(m.layer), int(m.datatype)) for m in lm}
+        except Exception:
+            from glayout._compat import get_layer_dict_for
+            return get_layer_dict_for(lm)
+
+
+
+
     valid_glayers: ClassVar[tuple[str]] = (
         "dnwell",
         "pwell",
@@ -269,15 +320,16 @@ class MappedPDK(Pdk):
     # friendly way to implement a graph
     grules: dict[StrictStr, dict[StrictStr, Optional[dict[StrictStr, Any]]]]
     pdk_files: dict[StrictStr, Union[PathType, None]]
+    grid_size: float = 0.005   # COMPAT: gdsfactory 9 removió Pdk.grid_size
 
-    @validator("models")
+    @field_validator("models")
     def models_check(cls, models_obj: dict[StrictStr, StrictStr]):
         for model in models_obj.keys():
             if not model in ["nfet","pfet","mimcap"]:
                 raise ValueError(f"specify nfet, pfet, or mimcap models only")
         return models_obj
 
-    @validator("glayers")
+    @field_validator("glayers")
     def glayers_check_keys(cls, glayers_obj: dict[StrictStr, Union[StrictStr, tuple[int,int]]]):
         """force people to pick glayers from a finite set of string layers that you define
         checks glayers to ensure valid keys,type. Glayers must be passed as dict[str,str]
@@ -291,7 +343,7 @@ class MappedPDK(Pdk):
                 )
         return glayers_obj
 
-    @validate_arguments
+    @validate_call(config={"arbitrary_types_allowed": True})
     def drc(
         self,
         layout: Component | PathType,
@@ -360,7 +412,7 @@ class MappedPDK(Pdk):
         drc_error_count = len(drc_root[7])
         return (drc_error_count == 0)
 
-    @validate_arguments
+    @validate_call(config={"arbitrary_types_allowed": True})
     def drc_magic(
         self, 
         layout: Component | PathType, 
@@ -543,7 +595,7 @@ custom_drc_save_report $::env(DESIGN_NAME) $::env(REPORTS_DIR)/$::env(DESIGN_NAM
 
         return ret_dict
 
-    @validate_arguments
+    @validate_call(config={"arbitrary_types_allowed": True})
     def lvs_netgen(
         self,
         layout: Component | PathType, 
@@ -803,7 +855,7 @@ exit
         return {'magic_subproc_code': magic_subproc_code, 'netgen_subproc_code': netgen_subproc_code, 'result_str': result_str}
                     
     
-    @validate_arguments
+    @validate_call(config={"arbitrary_types_allowed": True})
     def has_required_glayers(self, layers_required: list[str]):
         """Raises ValueError if any of the generic layers in layers_required: list[str]
         are not mapped to anything in the pdk.glayers dictionary
@@ -819,7 +871,7 @@ exit
                 raise TypeError("glayer mapped value should be str or tuple[int,int]")
 
 
-    @validate_arguments
+    @validate_call(config={"arbitrary_types_allowed": True})
     def layer_to_glayer(self, layer: tuple[int, int]) -> str:
         """if layer provided corresponds to a glayer, will return a glayer
         else will raise an exception
@@ -828,11 +880,11 @@ exit
         find_last = lambda val, d: [x for x, y in d.items() if y == val].pop()
         if layer in self.glayers.values():
             return find_last(layer, self.glayers)
-        elif self.layers is not None:
+        elif self.layers_dict is not None:
             # find glayer verfying presence along the way
-            pdk_real_layers = self.layers.values()
+            pdk_real_layers = self.layers_dict.values()
             if layer in pdk_real_layers:
-                layer_name = find_last(layer, self.layers)
+                layer_name = find_last(layer, self.layers_dict)
                 if layer_name in self.glayers.values():
                     glayer_name = find_last(layer_name, self.glayers)
                 else:
@@ -844,7 +896,7 @@ exit
             raise ValueError("layer might not be a layer present in the pdk")
 
     # TODO: implement LayerSpec type
-    @validate_arguments
+    @validate_call(config={"arbitrary_types_allowed": True})
     def get_glayer(self, layer: str) -> Layer:
         """Returns the pdk layer from the generic layer name"""
         direct_mapping = self.glayers[layer]
@@ -853,7 +905,7 @@ exit
         else:
             return self.get_layer(direct_mapping)
 
-    @validate_arguments
+    @validate_call(config={"arbitrary_types_allowed": True})
     def get_grule(
         self, glayer1: str, glayer2: Optional[str] = None, return_decimal = False
     ) -> dict[StrictStr, Union[float,Decimal]]:
@@ -932,7 +984,7 @@ exit
         return mappedpdk
 
     # util methods
-    @validate_arguments
+    @validate_call(config={"arbitrary_types_allowed": True})
     def util_max_metal_seperation(self, metal_levels: Union[list[int],list[str], str, int] = range(1,6)) -> float:
         """returns the maximum of the min_seperation rule for all layers specfied
         although the name of this function is util_max_metal_seperation, layers do not have to be metals
@@ -953,7 +1005,7 @@ exit
             sep_rules.append(self.get_grule(met)["min_separation"])
         return self.snap_to_2xgrid(max(sep_rules))
 
-    @validate_arguments
+    @validate_call(config={"arbitrary_types_allowed": True})
     def snap_to_2xgrid(self, dims: Union[list[Union[float,Decimal]], Union[float,Decimal]], return_type: Literal["decimal","float","same"]="float", snap4: bool=False) -> Union[list[Union[float,Decimal]], Union[float,Decimal]]:
         """snap all numbers in dims to double the grid size.
         This is useful when a generator accepts a size or dimension argument

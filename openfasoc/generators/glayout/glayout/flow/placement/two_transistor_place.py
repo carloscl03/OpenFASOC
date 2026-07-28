@@ -1,11 +1,11 @@
 from glayout.flow.pdk.mappedpdk import MappedPDK
-from pydantic import validate_arguments
+from pydantic import validate_call
 from gdsfactory.component import Component
 from typing import Callable
 from glayout.flow.primitives.fet import nmos, pmos
 from glayout.flow.pdk.util.comp_utils import evaluate_bbox
 
-@validate_arguments
+@validate_call(config={"arbitrary_types_allowed": True})
 def two_transistor_place(pdk: MappedPDK, pattern: str, deviceA: tuple[Callable, dict], deviceB: tuple[Callable, dict]) -> Component:
     """Place two transitors according to the patter provided
     args:

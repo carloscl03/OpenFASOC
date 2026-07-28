@@ -151,3 +151,10 @@ cython_debug/
 # Large Language Models
 glayout_llm_checkpoints/
 
+
+# iic-osic-setup: artefactos generados
+iic-osic-setup/setup/glayout_env.sh
+iic-osic-setup/examples/*.gds
+iic-osic-setup/examples/proyecto_demo/
+.gl_extra_deps/
+_check.gds
